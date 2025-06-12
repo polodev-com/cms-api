@@ -1,16 +1,17 @@
 import express from "express";
+
 const articleRoute = express.Router();
 import articleController from "../controllers/articleControler.js";
-import { checkUserApiKey } from "../middlewares/auth.js";
+import {validateUserJWTToken} from "../middlewares/auth.js";
 
 // Create article
-articleRoute.post("/create", checkUserApiKey, articleController.createArticle);
+articleRoute.post("/create", validateUserJWTToken, articleController.createArticle);
 
 // Upload article
 articleRoute.post(
-  "/:articleId/upload",
-  checkUserApiKey,
-  articleController.uploadArticleContent
+    "/:articleId/upload",
+    validateUserJWTToken,
+    articleController.uploadArticleContent
 );
 
 // Get recent articles
@@ -24,16 +25,16 @@ articleRoute.get("/:articleId", articleController.getArticleById);
 
 // Update an article
 articleRoute.patch(
-  "/:articleId/update",
-  checkUserApiKey,
-  articleController.updateArticleById
+    "/:articleId/update",
+    validateUserJWTToken,
+    articleController.updateArticleById
 );
 
 // Delete an article
 articleRoute.delete(
-  "/:articleId",
-  checkUserApiKey,
-  articleController.deleteArticle
+    "/:articleId",
+    validateUserJWTToken,
+    articleController.deleteArticle
 );
 
 export default articleRoute;
