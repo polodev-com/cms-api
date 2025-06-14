@@ -2,15 +2,15 @@ import express from "express";
 
 const articleRoute = express.Router();
 import articleController from "../controllers/articleControler.js";
-import {validateUserJWTToken} from "../middlewares/auth.js";
+import {validateUserJWTTokenMiddleware} from "../middlewares/auth.js";
 
 // Create article
-articleRoute.post("/create", validateUserJWTToken, articleController.createArticle);
+articleRoute.post("/create", validateUserJWTTokenMiddleware, articleController.createArticle);
 
 // Upload article
 articleRoute.post(
     "/:articleId/upload",
-    validateUserJWTToken,
+    validateUserJWTTokenMiddleware,
     articleController.uploadArticleContent
 );
 
@@ -26,14 +26,14 @@ articleRoute.get("/:articleId", articleController.getArticleById);
 // Update an article
 articleRoute.patch(
     "/:articleId/update",
-    validateUserJWTToken,
+    validateUserJWTTokenMiddleware,
     articleController.updateArticleById
 );
 
 // Delete an article
 articleRoute.delete(
     "/:articleId",
-    validateUserJWTToken,
+    validateUserJWTTokenMiddleware,
     articleController.deleteArticle
 );
 

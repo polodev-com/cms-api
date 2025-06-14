@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 import sequelize from "./libs/database.js";
 import cors from "cors";
 import "./crons/index.js";
-import {checkBucketConnection} from "./libs/minio.js";
+import {checkMinIOBucketConnection} from "./libs/minio.js";
 import {rateLimit} from "express-rate-limit";
 
 app.use(express.json()); // for parsing application/json
@@ -49,7 +49,7 @@ app.listen(port, async () => {
     const {CMS_DATA_MINIO_BUCKET_NAME: cmsDataBucketName, SUPPORTED_OBJECT_STORAGE_SERVICES} = process.env;
     const supportedServices = SUPPORTED_OBJECT_STORAGE_SERVICES?.split(",") || [];
     if (supportedServices.includes("minio")) {
-        await checkBucketConnection(cmsDataBucketName);
+        await checkMinIOBucketConnection(cmsDataBucketName);
     }
     if (supportedServices) {
         await checkS3Connection().then(ok => ok && console.log("Connected to S3"));

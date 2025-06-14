@@ -25,16 +25,23 @@ export const getArticleListSchema = yup.object().shape({
             ["publish_on", "title"],
             "Invalid sortby, must be publish_on or title",
         ),
-    // status:yup.string().oneOf([]),
     sorttype: yup
         .string()
         .uppercase()
         .oneOf(["DESC", "ASC"], "Invalid sorttype, must be either DESC or ASC"),
+
+    // NOTE: Admin only
+    status: yup.string().when('$isAdmin', {
+        is: true,
+        then: (schema) => schema.oneOf(["hidden", "published", "delisted"]),
+        otherwise: (schema) => schema.strip()
+    }),
     // startDate: yup.date().default(moment().startOf("day").toDate()),
     // endDate: yup
     //   .date()
     //   .default(moment().subtract(1, "months").endOf("day").toDate()),
 });
+
 export const articleUpdateSchema = yup.object().shape({
     // TODO: Update validation when updating the article publish duration
     title: yup

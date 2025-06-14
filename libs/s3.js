@@ -28,7 +28,7 @@ export async function checkS3Connection() {
         await s3Client.send(command)
         return true
     } catch (error) {
-        console.log("[Tim debug] checkS3Connection error", error);
+        console.error("[checkS3Connection] error:", error);
         return false
     }
 }

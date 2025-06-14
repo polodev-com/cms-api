@@ -2,7 +2,43 @@ import fetch from "node-fetch";
 import {globalCache} from "../libs/cache.js";
 import authApiService from "../services/authApiService.js";
 
-export const validateUserJWTToken = async (req, res, next) => {
+/**
+ * @description Can be used inside a controller to get the user authentication information
+ * @param req
+ * @param res
+ * @returns {Promise<unknown>}
+ */
+export const validateUserJWTToken = async (req, res) => {
+    const {authorization: authHeader} = req.headers;
+    if (!authHeader) {
+        throw new Error("Missing JWT token in the header.")
+    }
+    const [tokenType, jwtToken] = authHeader.split(" ")
+    if (tokenType !== "Bearer") {
+        throw new Error("Invalid auth token type")
+    }
+    if (!jwtToken) {
+        throw new Error("Missing JWT token in the header")
+    }
+    let userData = globalCache.get(jwtToken);
+
+    if (userData) return userData;
+
+    userData = await authApiService.validateToken(jwtToken)
+    if (!userData.valid) new Error("Invalid user.")
+    globalCache.set(jwtToken, userData)
+    req.auth = userData
+    return userData;
+}
+
+/**
+ * @description Middleware used for authenticate user
+ * @param req
+ * @param res
+ * @param next
+ * @returns {Promise<*>}
+ */
+export const validateUserJWTTokenMiddleware = async (req, res, next) => {
     try {
         const {authorization: authHeader} = req.headers;
         if (!authHeader) {

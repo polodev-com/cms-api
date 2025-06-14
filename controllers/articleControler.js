@@ -17,14 +17,33 @@ import {Op} from "sequelize";
 import path from "path";
 import moment from "moment";
 import {makeResponse} from "../utils/index.js";
+import {validateUserJWTToken, validateUserJWTTokenMiddleware} from "../middlewares/auth.js";
 
 const articlesController = {
-    // TODO: Filter by status of the article, must be ADMIN and require access key to access article with status !== 'published'
-    getArticleList: async (req, res) => {
+    getArticleList: async (req, res, next) => {
         try {
+            // Only for admin, must have the JWT token in the header
+            // Admins allowed to list all articles regardless of status or publish date
+            let isAdmin = false;
+            let adminInfo;
+            if (req.headers.authorization) {
+                try {
+                    adminInfo = await validateUserJWTToken(req, res)
+                    if (adminInfo.valid && adminInfo.user.role === "admin") {
+                        isAdmin = true
+                    }
+                } catch (e) {
+                    return res.status(401).json({message: "Unauthorized"})
+                }
+            }
+
             let queryParam;
             try {
-                queryParam = await getArticleListSchema.validate(req.query);
+                queryParam = await getArticleListSchema.validate(req.query, {
+                    abortEarly: true,
+                    stripUnknown: true,
+                    context: {isAdmin: isAdmin}
+                });
             } catch (error) {
                 return res
                     .status(400)
@@ -37,7 +56,7 @@ const articlesController = {
                     .status(500)
                     .json({message: "Something went wrong", error: hashError});
             }
-            if (!hashError && articleListCacheQuery) {
+            if (!hashError && articleListCacheQuery && !isAdmin) {
                 const cachedArticleList = articleListCache.get(articleListCacheQuery);
                 if (cachedArticleList) {
                     return res.status(200).json(cachedArticleList);
@@ -54,7 +73,7 @@ const articlesController = {
             const limit = parseInt(pageSize); // Number of records per page
             const offset = (parseInt(page) - 1) * limit; // Calculate offset
             const now = moment().toDate();
-            let whereClauses = {
+            let whereClauses = !adminInfo ? {
                 [Op.and]: [
                     {
                         publish_on: {
@@ -66,7 +85,7 @@ const articlesController = {
                     },
                 ],
                 status: "published",
-            };
+            } : {[Op.and]: []};
 
             const filterByKeywords = !!keywords?.length;
             if (filterByKeywords) {
@@ -92,8 +111,10 @@ const articlesController = {
                     };
                 }),
             };
-            // Add to cache
-            articleListCache.set(articleListCacheQuery, response);
+            // When not admin, cache the article query
+            if (!isAdmin) {
+                articleListCache.set(articleListCacheQuery, response);
+            }
             res.status(200).json(response);
         } catch (error) {
             console.error("Error in getArticleList", error);
@@ -102,6 +123,20 @@ const articlesController = {
     },
     getArticleById: async (req, res) => {
         try {
+            let isAdmin = false;
+            let adminInfo;
+
+            if (req.headers.authorization) {
+                try {
+                    adminInfo = await validateUserJWTToken(req, res)
+                    if (adminInfo.valid && adminInfo.user.role === "admin") {
+                        isAdmin = true
+                    }
+                } catch (e) {
+                    return res.status(401).json({message: "Unauthorized"})
+                }
+            }
+
             const {MINIO_ENDPOINT, CMS_DATA_MINIO_BUCKET_NAME} = process.env;
             const {articleId} = req.params;
             if (!articleId) {
@@ -114,8 +149,8 @@ const articlesController = {
             // Check if the articleInfo available in the cache
             await Articles.findByPk(articleId)
                 .then((article) => {
-                    if (!article) {
-                        return res.status(404).json({message: "Article not found"});
+                    if (!article || (article.dataValues.status !== "published" && !isAdmin)) {
+                        return res.status(404).json({message: "Article not found or has been set to private"});
                     }
                     const response = {
                         ...pick(article.dataValues, [
@@ -127,10 +162,12 @@ const articlesController = {
                         ]).__wrapped__,
                         // This is the default main content that served from minio
                         // TODO: Make this more flexible
-                        content: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${articleId}/content.md`,
-                        thumbnail: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${articleId}/thumbnail.png`,
+                        content: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${process.env.NODE_ENV}/articles/{/${articleId}/content.md`,
+                        thumbnail: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${process.env.NODE_ENV}/articles/${articleId}/thumbnail.png`,
                     };
-                    articleDetailCache.set(articleId, response);
+                    if (!isAdmin) {
+                        articleDetailCache.set(articleId, response);
+                    }
                     return res.status(200).json(response);
                 })
                 .catch((e) => {
@@ -167,7 +204,7 @@ const articlesController = {
         try {
             const {CMS_DATA_MINIO_BUCKET_NAME: cmsDataBucketName} = process.env;
             const {articleId} = req.params;
-            // User can upload mutiple files
+            // User can upload multiple files
             const {files} = req.body;
             let response = {};
             // Validate files extension
@@ -259,7 +296,7 @@ const articlesController = {
             res.status(500).json({message: "Something went wrong"});
         }
     },
-    deleteArticle: async () => {
+    deleteArticle: async (req, res, next) => {
         try {
             const {articleId} = req.params;
             const article = await Articles.findByPk(articleId);
@@ -267,6 +304,7 @@ const articlesController = {
                 return res.status(404).json({message: "Article not found"});
             }
             await Articles.destroy({where: {id: articleId}});
+            // TODO: Remove also the file on object storage
         } catch (error) {
             console.error("Error in deleteArticle", error?.stack);
             res.status(500).json({message: "Something went wrong"});
