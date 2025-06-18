@@ -46,10 +46,15 @@ app.get("/health-check", (req, res) => {
 app.listen(port, async () => {
     console.log(`Example app listening on port ${port}`);
     // Checking connection to other services
-    const {CMS_DATA_MINIO_BUCKET_NAME: cmsDataBucketName, SUPPORTED_OBJECT_STORAGE_SERVICES} = process.env;
+    const {
+        CMS_MINIO_PUBLIC_BUCKET_NAME: publicMinIOBucket,
+        CMS_MINIO_PRIVATE_BUCKET_NAME: privateMinIOBucket,
+        SUPPORTED_OBJECT_STORAGE_SERVICES
+    } = process.env;
     const supportedServices = SUPPORTED_OBJECT_STORAGE_SERVICES?.split(",") || [];
     if (supportedServices.includes("minio")) {
-        await checkMinIOBucketConnection(cmsDataBucketName);
+        await checkMinIOBucketConnection(publicMinIOBucket);
+        await checkMinIOBucketConnection(privateMinIOBucket);
     }
     if (supportedServices) {
         await checkS3Connection().then(ok => ok && console.log("Connected to S3"));

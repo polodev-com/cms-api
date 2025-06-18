@@ -1,5 +1,5 @@
 import Articles from "../models/articles.model.js";
-import {generatePresignedUrl} from "../libs/minio.js";
+import {generatePresignedUrl, moveFilesBetweenBuckets} from "../libs/minio.js";
 import {allowedFileExtensions} from "../consts/index.js";
 import pick from "lodash";
 import {
@@ -16,7 +16,7 @@ import {
 import {Op} from "sequelize";
 import path from "path";
 import moment from "moment";
-import {makeResponse} from "../utils/index.js";
+import {getArticleContentUrl, getThumbnailUrl, makeResponse} from "../utils/index.js";
 import {validateUserJWTToken, validateUserJWTTokenMiddleware} from "../middlewares/auth.js";
 
 const articlesController = {
@@ -69,7 +69,6 @@ const articlesController = {
                 sortby = "created_at",
                 sorttype = "DESC",
             } = queryParam;
-            const {MINIO_ENDPOINT, CMS_DATA_MINIO_BUCKET_NAME} = process.env;
             const limit = parseInt(pageSize); // Number of records per page
             const offset = (parseInt(page) - 1) * limit; // Calculate offset
             const now = moment().toDate();
@@ -107,7 +106,7 @@ const articlesController = {
                 data: rows.map((article) => {
                     return {
                         ...article,
-                        thumbnail: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${article.id}/thumbnail.png`,
+                        thumbnail: getThumbnailUrl(article.id)
                     };
                 }),
             };
@@ -136,8 +135,6 @@ const articlesController = {
                     return res.status(401).json({message: "Unauthorized"})
                 }
             }
-
-            const {MINIO_ENDPOINT, CMS_DATA_MINIO_BUCKET_NAME} = process.env;
             const {articleId} = req.params;
             if (!articleId) {
                 return res.status(400).json({message: "Missing article id param"});
@@ -162,8 +159,8 @@ const articlesController = {
                         ]).__wrapped__,
                         // This is the default main content that served from minio
                         // TODO: Make this more flexible
-                        content: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${process.env.NODE_ENV}/articles/{/${articleId}/content.md`,
-                        thumbnail: `https://${MINIO_ENDPOINT}/${CMS_DATA_MINIO_BUCKET_NAME}/${process.env.NODE_ENV}/articles/${articleId}/thumbnail.png`,
+                        content: getArticleContentUrl(articleId),
+                        thumbnail: getThumbnailUrl(articleId),
                     };
                     if (!isAdmin) {
                         articleDetailCache.set(articleId, response);
@@ -202,7 +199,7 @@ const articlesController = {
      */
     uploadArticleContent: async (req, res) => {
         try {
-            const {CMS_DATA_MINIO_BUCKET_NAME: cmsDataBucketName} = process.env;
+            const {CMS_MINIO_PUBLIC_BUCKET_NAME: cmsDataBucketName} = process.env;
             const {articleId} = req.params;
             // User can upload multiple files
             const {files} = req.body;
@@ -259,6 +256,15 @@ const articlesController = {
         try {
             let body;
             const {articleId} = req.params;
+            const {
+                CMS_MINIO_PUBLIC_BUCKET_NAME: publicBucketName,
+                CMS_PRIVATE_MINIO_BUCKET_NAME: privateBucketName
+            } = process.env;
+
+            if (!publicBucketName || !privateBucketName) {
+                throw new Error('MinIO bucket names not configured in environment variables');
+            }
+
             try {
                 if (!articleId) {
                     throw Error("Missing article id");
@@ -268,19 +274,40 @@ const articlesController = {
                 console.error(error);
                 return res.status(400).json({message: "Bad request"});
             }
+
             // Find the article with id
             const article = await Articles.findByPk(articleId);
             if (!article) {
                 return res.status(404).json({message: "Article not found"});
             }
+
+            // Check if status is being changed from published to hidden/delisted
+            if (article.status === 'published' &&
+                (body.status === 'hidden' || body.status === 'delisted')) {
+                try {
+                    // Move files from public to private bucket
+                    await moveFilesBetweenBuckets(
+                        publicBucketName,
+                        privateBucketName,
+                        `${articleId}/`
+                    );
+                } catch (error) {
+                    console.error('Error moving files between buckets:', error);
+                    return res.status(500).json({
+                        message: "Failed to move article files to private storage"
+                    });
+                }
+            }
+
             // Update the article metadata
             const response = await Articles.update(
                 {...body, updated_at: Date.now()},
                 {
                     where: {id: articleId},
                     returning: true,
-                },
+                }
             );
+
             return res.status(200).json({
                 data: pick(response[1][0].dataValues, [
                     "id",

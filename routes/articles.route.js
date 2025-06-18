@@ -10,7 +10,7 @@ articleRoute.post("/create", validateUserJWTTokenMiddleware, articleController.c
 // Upload article
 articleRoute.post(
     "/:articleId/upload",
-    validateUserJWTTokenMiddleware,
+    validateUserJWTTokenMiddleware("admin"),
     articleController.uploadArticleContent
 );
 

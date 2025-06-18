@@ -33,12 +33,10 @@ export const validateUserJWTToken = async (req, res) => {
 
 /**
  * @description Middleware used for authenticate user
- * @param req
- * @param res
- * @param next
+ * @param {string} [requiredRole] - Optional, only allow this role to access the route
  * @returns {Promise<*>}
  */
-export const validateUserJWTTokenMiddleware = async (req, res, next) => {
+export const validateUserJWTTokenMiddleware = (requiredRole = null) => async (req, res, next) => {
     try {
         const {authorization: authHeader} = req.headers;
         if (!authHeader) {
@@ -57,7 +55,9 @@ export const validateUserJWTTokenMiddleware = async (req, res, next) => {
             if (!userData.valid) {
                 throw new Error("Invalid user.")
             }
-            console.log("Get user data from the cache", userData);
+            if (requiredRole && userData.user.role !== requiredRole) {
+                return res.status(403).json({message: `Must be ${requiredRole} to access this route.`});
+            }
             req.auth = userData;
             next();
         }
@@ -65,7 +65,6 @@ export const validateUserJWTTokenMiddleware = async (req, res, next) => {
         userData = await authApiService.validateToken(jwtToken)
         if (!userData.valid) new Error("Invalid user.")
         globalCache.set(jwtToken, userData, Math.round((Date.now() / 1000)) - userData.user.exp);
-        console.log("User data saved to the cache");
         req.auth = userData;
         next();
     } catch (error) {

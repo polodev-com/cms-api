@@ -4,13 +4,13 @@ import * as Minio from "minio";
 // Initialize the MinIO client
 const {MINIO_AK, MINIO_SK, MINIO_PORT, MINIO_SSL_ENABLED, MINIO_ENDPOINT} =
     process.env;
-const minioClient = new Minio.Client({
+export const minioClient = new Minio.Client({
     endPoint: MINIO_ENDPOINT,
     // port: Number(MINIO_PORT) || 9000,
-    useSSL: MINIO_SSL_ENABLED === "true" ? true : false, // Set to true if using HTTPS
+    useSSL: MINIO_SSL_ENABLED === "true", // Set to true if using HTTPS
     accessKey: MINIO_AK,
     secretKey: MINIO_SK,
-    region: "us-east-1",
+    // region: "us-east-1",
 });
 
 export async function checkMinIOBucketConnection(bucketName) {
