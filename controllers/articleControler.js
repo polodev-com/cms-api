@@ -16,7 +16,7 @@ import {
 import {Op} from "sequelize";
 import path from "path";
 import moment from "moment";
-import {getArticleContentUrl, getThumbnailUrl, makeResponse} from "../utils/index.js";
+import {getArticleContentUrl, getAuthorInfo, getThumbnailUrl, makeResponse} from "../utils/index.js";
 import {validateUserJWTToken, validateUserJWTTokenMiddleware} from "../middlewares/auth.js";
 
 const articlesController = {
@@ -106,6 +106,8 @@ const articlesController = {
                 data: rows.map((article) => {
                     return {
                         ...article,
+                        author: getAuthorInfo(), // TODO: Make this more flexible
+                        content: getArticleContentUrl(article.id),
                         thumbnail: getThumbnailUrl(article.id)
                     };
                 }),
@@ -159,6 +161,7 @@ const articlesController = {
                         ]).__wrapped__,
                         // This is the default main content that served from minio
                         // TODO: Make this more flexible
+                        author: getAuthorInfo(),
                         content: getArticleContentUrl(articleId),
                         thumbnail: getThumbnailUrl(articleId),
                     };
