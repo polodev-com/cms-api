@@ -10,7 +10,18 @@ import {checkMinIOBucketConnection} from "./libs/minio.js";
 import {rateLimit} from "express-rate-limit";
 
 app.use(express.json()); // for parsing application/json
-app.use(cors());
+
+const corsWhiteListOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",") || [];
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (corsWhiteListOrigins.indexOf(origin) !== -1 || !origin) {
+            callback(null, true)
+        } else {
+            callback(new Error('Not allowed by CORS'))
+        }
+    }
+}
+app.use(cors(corsOptions));
 
 // Rate limiter configuration
 const limiter = rateLimit({
