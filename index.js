@@ -42,6 +42,7 @@ sequelize
     .catch((err) => console.error("Unable to create tables:", err));
 import articleRoute from "./routes/articles.route.js";
 import {checkS3Connection} from "./libs/s3.js";
+import {updateArticleCountByKeyword} from "./crons/index.js";
 
 // Use routes
 app.use("/articles", articleRoute);
@@ -70,4 +71,7 @@ app.listen(port, async () => {
     if (supportedServices) {
         await checkS3Connection().then(ok => ok && console.log("Connected to S3"));
     }
+
+    // Init the article count by keyword cache in case the cron job is not yet run
+    await updateArticleCountByKeyword()
 });

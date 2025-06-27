@@ -18,7 +18,6 @@ export const updateArticleCountByKeyword = async () => {
                 })
             );
         });
-        console.log("[Tim debug] updateArticleCountByKeyword====================");
     } catch (error) {
         console.log("Error in updateArticleCountByKeyword", error);
     }
