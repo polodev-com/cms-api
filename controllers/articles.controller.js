@@ -18,6 +18,7 @@ import path from "path";
 import moment from "moment";
 import {getArticleContentUrl, getAuthorInfo, getThumbnailUrl, makeResponse} from "../utils/index.js";
 import {validateUserJWTToken, validateUserJWTTokenMiddleware} from "../middlewares/auth.js";
+import {updateArticleCountByKeyword} from "../crons/index.js";
 
 const articlesController = {
     getArticleList: async (req, res, next) => {
@@ -340,6 +341,32 @@ const articlesController = {
             res.status(500).json({message: "Something went wrong"});
         }
     },
+    clearArticleCache: async (req, res) => {
+        try {
+            const {
+                articleId,
+                flushAllArticleListCache = false,
+                flushAllArticleDetailCache = false,
+                refreshKeywordStats = false
+            } = req.body;
+            if (articleId) {
+                articleDetailCache.del(articleId);
+            }
+            if (flushAllArticleListCache) {
+                articleListCache.flushAll();
+            }
+            if (flushAllArticleDetailCache) {
+                articleDetailCache.flushAll();
+            }
+            if (refreshKeywordStats) {
+                await updateArticleCountByKeyword()
+            }
+            return res.status(200).json({message: "Article cache cleared successfully"});
+        } catch (error) {
+            console.error("Error in clearArticleCache", error?.stack);
+            res.status(500).json({message: "Something went wrong"});
+        }
+    }
 };
 
 export default articlesController;
