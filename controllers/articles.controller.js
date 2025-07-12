@@ -312,6 +312,9 @@ const articlesController = {
                 try {
                     const prefix = `${NODE_ENV}/articles/${articleId}/`;
                     await moveFilesBetweenBuckets(privateBucketName, publicBucketName, prefix);
+                    // Clear the cache for the article by id
+                    articleDetailCache.del(articleId)
+                    articleListCache.flushAll()
                 } catch (e) {
                     console.error("[updateArticleById] error:", e);
                 }
