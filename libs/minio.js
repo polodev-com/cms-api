@@ -164,27 +164,7 @@ export async function moveFilesBetweenBuckets(sourceBucket, destinationBucket, f
 
         // --- Step 1: Copy all files ---
         const copyPromises = filesToProcess.map(sourceFileKey => {
-            // Determine destination key: remove prefix from source key.
-            // e.g., if fileKeyPrefix = "folder1/", sourceFileKey = "folder1/image.jpg" -> destinationFileKey = "image.jpg"
             let destinationFileKey = sourceFileKey;
-            if (fileKeyPrefix && sourceFileKey.startsWith(fileKeyPrefix)) {
-                destinationFileKey = sourceFileKey.substring(fileKeyPrefix.length);
-            }
-            // If the prefix is the entire object key, destinationFileKey could be empty.
-            // Minio typically requires non-empty object keys.
-            // This implementation assumes fileKeyPrefix is a path-like prefix and destinationFileKey will be non-empty.
-            // If destinationFileKey is empty, putObject might fail or behave unexpectedly.
-            if (destinationFileKey === "") {
-                // Fallback: if stripping prefix results in empty string, use the original filename part.
-                // This handles cases like prefix="file.txt" and key="file.txt" -> move as "file.txt"
-                const lastSlash = sourceFileKey.lastIndexOf('/');
-                destinationFileKey = lastSlash === -1 ? sourceFileKey : sourceFileKey.substring(lastSlash + 1);
-                if (destinationFileKey === "") { // Should not happen if sourceFileKey is valid
-                    console.warn(`Warning: Calculated empty destination key for source ${sourceFileKey} with prefix ${fileKeyPrefix}. Skipping this file for safety.`);
-                    return Promise.resolve(); // Skip this problematic file
-                }
-            }
-
             return (async () => {
                 const objectStream = await minioClient.getObject(sourceBucket, sourceFileKey);
                 await minioClient.putObject(destinationBucket, destinationFileKey, objectStream);
@@ -196,10 +176,6 @@ export async function moveFilesBetweenBuckets(sourceBucket, destinationBucket, f
 
         // --- Step 2: Delete all files from source if copy was successful ---
         const deletePromises = filesToProcess.map(sourceFileKey => {
-            // Check if the file was skipped during copy (e.g. due to empty destination key)
-            // This check is a bit indirect; ideally, skipped files wouldn't be in delete list.
-            // For simplicity, we attempt to delete all originally listed files.
-            // If a file was problematic and skipped in copy, its deletion here is okay as it wasn't "moved".
             return minioClient.removeObject(sourceBucket, sourceFileKey);
         });
 

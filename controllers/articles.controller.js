@@ -1,6 +1,6 @@
 import Articles from "../models/articles.model.js";
 import {generatePresignedUrl, moveFilesBetweenBuckets} from "../libs/minio.js";
-import {allowedFileExtensions} from "../consts/index.js";
+import {allowedFileExtensions, NODE_ENV} from "../consts/index.js";
 import pick from "lodash";
 import {
     articleUpdateSchema,
@@ -262,7 +262,7 @@ const articlesController = {
             const {articleId} = req.params;
             const {
                 CMS_MINIO_PUBLIC_BUCKET_NAME: publicBucketName,
-                CMS_PRIVATE_MINIO_BUCKET_NAME: privateBucketName
+                CMS_MINIO_PRIVATE_BUCKET_NAME: privateBucketName
             } = process.env;
 
             if (!publicBucketName || !privateBucketName) {
@@ -289,17 +289,31 @@ const articlesController = {
             if (article.status === 'published' &&
                 (body.status === 'hidden' || body.status === 'delisted')) {
                 try {
+                    const prefix = `${NODE_ENV}/articles/${articleId}/`;
                     // Move files from public to private bucket
                     await moveFilesBetweenBuckets(
                         publicBucketName,
                         privateBucketName,
-                        `${articleId}/`
+                        prefix
                     );
+                    // Clear the cache for the article by id
+                    articleDetailCache.del(articleId)
+                    articleListCache.flushAll()
                 } catch (error) {
-                    console.error('Error moving files between buckets:', error);
+                    console.error("[updateArticleById] error:", error);
                     return res.status(500).json({
                         message: "Failed to move article files to private storage"
                     });
+                }
+            }
+            // If status changed from "hidden" or "delisted" to "published"
+            // Then move all the files from the private bucket to the public bucket
+            if (body.status === 'published' && (["hidden", "delisted"].includes(article.status))) {
+                try {
+                    const prefix = `${NODE_ENV}/articles/${articleId}/`;
+                    await moveFilesBetweenBuckets(privateBucketName, publicBucketName, prefix);
+                } catch (e) {
+                    console.error("[updateArticleById] error:", e);
                 }
             }
 
@@ -323,7 +337,7 @@ const articlesController = {
                 ]),
             });
         } catch (error) {
-            console.error("Error in updateArticleById", error?.stack);
+            console.error("Error in updateArticleById", error);
             res.status(500).json({message: "Something went wrong"});
         }
     },
